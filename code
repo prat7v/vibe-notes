@@ -1,0 +1,167 @@
+"use client";
+import React, { useState, useEffect } from "react";
+import Header from "../components/Header";
+import NoteInput from "../components/NoteInput";
+import NoteCard from "../components/NoteCard";
+import { getNotes, saveNotes } from "../utils/storage";
+
+type Note = {
+  id: string;
+  text: string;
+  date: string;
+};
+
+const VIBE_NOTES_KEY = "vibe_notes";
+
+const getInitialTheme = () => {
+  if (typeof window !== "undefined") {
+    const stored = localStorage.getItem("vibe_theme");
+    if (stored) return stored;
+    if (window.matchMedia("(prefers-color-scheme: dark)").matches) return "dark";
+  }
+  return "light";
+};
+
+export default function Home() {
+  const [notes, setNotes] = useState<Note[]>([]);
+  const [theme, setTheme] = useState(getInitialTheme());
+
+  // Load notes from localStorage
+  useEffect(() => {
+    setNotes(getNotes());
+  }, []);
+
+  // Save notes to localStorage on change
+  useEffect(() => {
+    saveNotes(notes);
+  }, [notes]);
+
+  // Theme handling
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      document.documentElement.classList.toggle("dark", theme === "dark");
+      localStorage.setItem("vibe_theme", theme);
+    }
+  }, [theme]);
+
+  const addNote = (text: string) => {
+    const newNote: Note = {
+      id: Date.now().toString(),
+      text,
+      date: new Date().toLocaleString(),
+    };
+    setNotes([newNote, ...notes]);
+  };
+
+  const deleteNote = (id: string) => {
+    setNotes(notes.filter((note) => note.id !== id));
+  };
+
+  // Export as .txt
+  const exportTxt = () => {
+    const content = notes
+      .map((n, i) => `#${notes.length - i} (${n.date})\n${n.text}\n`)
+      .join("\n----------------------\n\n");
+    const blob = new Blob([content], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "vibe-notes.txt";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // Export as PDF (using html2pdf.js)
+  const exportPdf = async () => {
+    if (typeof window === "undefined") return;
+    const html2pdf = (await import("html2pdf.js")).default;
+    const element = document.getElementById("notes-export");
+    if (element) {
+      html2pdf()
+        .from(element)
+        .set({
+          margin: 0.5,
+          filename: "vibe-notes.pdf",
+          html2canvas: { scale: 2 },
+          jsPDF: { unit: "in", format: "letter", orientation: "portrait" },
+        })
+        .save();
+    }
+  };
+
+  // Optional: Mood/Quote of the Day
+  const [quote, setQuote] = useState<string | null>(null);
+  useEffect(() => {
+    // Simple static quotes for retro vibes
+    const quotes = [
+      "“Simplicity is the ultimate sophistication.” – Leonardo da Vinci",
+      "“Stay hungry, stay foolish.” – Steve Jobs",
+      "“Less, but better.” – Dieter Rams",
+      "“The details are not the details. They make the design.” – Charles Eames",
+      "“Creativity is intelligence having fun.” – Albert Einstein",
+    ];
+    setQuote(quotes[new Date().getDate() % quotes.length]);
+  }, []);
+
+  return (
+    <div
+      className={`min-h-screen bg-[#f6f6f6] dark:bg-[#181c20] transition-colors duration-300 font-mono flex flex-col items-center py-6 px-2`}
+      style={{
+        background:
+          theme === "dark"
+            ? "linear-gradient(135deg, #232526 0%, #414345 100%)"
+            : "linear-gradient(135deg, #f6f6f6 0%, #e0e7ef 100%)",
+      }}
+    >
+      <div className="w-full max-w-xl">
+        <Header theme={theme} setTheme={setTheme} />
+        {quote && (
+          <div className="mb-4 p-3 rounded-lg bg-[#e0e7ef] dark:bg-[#232526] shadow-[0_2px_8px_rgba(0,0,0,0.08)] border border-[#d1d5db] dark:border-[#333] text-center text-sm text-[#555] dark:text-[#bbb] select-none">
+            <span className="opacity-80">{quote}</span>
+          </div>
+        )}
+        <NoteInput onAdd={addNote} />
+        <div className="flex justify-between items-center mt-4 mb-2 gap-2">
+          <div className="flex gap-2">
+            <button
+              onClick={exportTxt}
+              className="px-3 py-1 rounded-md bg-[#e0e7ef] dark:bg-[#232526] border border-[#bfcad6] dark:border-[#333] shadow-[0_1px_4px_rgba(0,0,0,0.06)] text-xs font-semibold hover:bg-[#dbeafe] dark:hover:bg-[#2d3238] transition"
+            >
+              Export .txt
+            </button>
+            <button
+              onClick={exportPdf}
+              className="px-3 py-1 rounded-md bg-[#e0e7ef] dark:bg-[#232526] border border-[#bfcad6] dark:border-[#333] shadow-[0_1px_4px_rgba(0,0,0,0.06)] text-xs font-semibold hover:bg-[#dbeafe] dark:hover:bg-[#2d3238] transition"
+            >
+              Export .pdf
+            </button>
+          </div>
+          <span className="text-xs text-[#888] dark:text-[#aaa]">
+            {notes.length} note{notes.length !== 1 ? "s" : ""}
+          </span>
+        </div>
+        <div
+          id="notes-export"
+          className="flex flex-col gap-3 max-h-[60vh] overflow-y-auto pb-2"
+        >
+          {notes.length === 0 ? (
+            <div className="text-center text-[#aaa] dark:text-[#666] mt-8">
+              <span className="opacity-70">No notes yet. Add your first vibe!</span>
+            </div>
+          ) : (
+            notes.map((note) => (
+              <NoteCard
+                key={note.id}
+                note={note}
+                onDelete={() => deleteNote(note.id)}
+              />
+            ))
+          )}
+        </div>
+      </div>
+      <footer className="mt-8 text-xs text-[#bfcad6] dark:text-[#444] opacity-70 select-none">
+        Vibe Notes &copy; {new Date().getFullYear()} &mdash; Retro micro-journaling
+      </footer>
+    </div>
+  );
+}
